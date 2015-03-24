@@ -10,6 +10,11 @@ import sys
 import time
 from squirro_client import ItemUploader 
 import requests
+import getpass
+import hashlib
+import json
+
+
 # Script version. It's recommended to increment this with every change, to make
 # debugging easier.
 VERSION = '0.9.0'
@@ -18,6 +23,10 @@ VERSION = '0.9.0'
 # Set up logging.
 log = logging.getLogger('{0}[{1}]'.format(os.path.basename(sys.argv[0]),
                                           os.getpid()))
+def pretty_print(obj):
+    print json.dumps(obj, indent=4, sort_keys=True)
+    return
+
 #how do I validate this properly?
 def validate_per_page(per_page):
     try:
@@ -27,7 +36,7 @@ def validate_per_page(per_page):
         print '--per_page argument must be within range 1-100'
         Ex
 
-def get_comments_by_url(url, auth):
+def get_comments_by_url(CACHE_FOLDER, url, auth):
 
     #create cachekey
     m = hashlib.md5()
@@ -72,23 +81,32 @@ def parse_link_header(headers):
 
 def main(args, config):
     #uploader
-    uploader = ItemUploader(project_id=args.project_id,
-                            source_name=args.source_name,
-                            token=args.token,
-                            cluster=args.cluster)
-    url = args.url
-    user = (args.user, args.password)
-    payload = {'per_page':args.per_page,'page':1, 'state':'all', 'sort':'updated'}
+
+    CACHE_FOLDER = 'C:/Python27/cache'
+
+
+    p = getpass.getpass(prompt='Github password: ')
+    uploader = ItemUploader(project_id=config.get('squirro_credentials','project_id'),
+                            source_name=config.get('squirro_credentials','source_name'),
+                            token=config.get('squirro_credentials','token'),
+                            cluster=config.get('squirro_credentials','cluster'))
+    url = config.get('git_credentials', 'url')
+    user = (config.get('git_credentials','user'), p)
+
+    payload = {'per_page':str(args.per_page),'page':1, 'state':'all', 'sort':'updated'}
+    print config.get('git_credentials', 'user')
 
     r = requests.get(url, auth=user, params=payload)
     request_count = 0
     issue_count = 0
     while True:
         items = []
-        #keep track of iterations
-        issue_count += (int(per_page))
-        request_count += 1
+        issues = r.json()
 
+        #keep track of iterations
+        issue_count += (int(issue_count))
+        request_count += 1
+        
         for issue in issues: 
             item={}
             item['title'] = issue['title']
@@ -126,7 +144,7 @@ def main(args, config):
 
             #if the ticket has comments
             if issue['comments'] != '0':
-                comments = get_comments_by_url(issue['comments_url'], auth=user)
+                comments = get_comments_by_url(CACHE_FOLDER, issue['comments_url'], auth=user)
                 for comment in comments:
 
                     request_count += 1
