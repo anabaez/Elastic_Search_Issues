@@ -102,9 +102,11 @@ def main(args, config):
     while True:
         items = []
         issues = r.json()
+        if request_count >= args.max_requests:
+            print '%s requests made, ending script' % str(requests_count)
 
         #keep track of iterations
-        issue_count += (int(issue_count))
+        issue_count += (int(args.per_page))
         request_count += 1
         
         for issue in issues: 
@@ -144,7 +146,7 @@ def main(args, config):
 
             #if the ticket has comments
             if issue['comments'] != '0':
-                comments = get_comments_by_url(CACHE_FOLDER, issue['comments_url'], auth=user)
+                comments = requests.get(issue['comments_url'], auth=user).json()
                 for comment in comments:
 
                     request_count += 1
@@ -173,8 +175,10 @@ def main(args, config):
             ks = {}
             if issue['locked'] == True:
                 ks['locked'] = 'locked'
-            ks['assignee'] = issue['assignee']['login']
-            ks['milestone'] = issue['milestone']
+            # if issue['assignee']['login']:
+            #     ks['assignee'] = issue['assignee']['login']
+            if  issue['milestone']:
+                ks['milestone'] = issue['milestone']
             ks['comments'] = str(issue['comments'])
             ks['status'] = issue['state']
             ks['id'] = issue['id']
@@ -206,8 +210,8 @@ def parse_args():
     parser.add_argument('--config-file', dest='config_file',
                         help='Configuration file to read settings from.')
     parser.add_argument('--per_page', '-pp', default='100',
-                        help='number of items to appear per request')
-    parser.add_argument('--max_requests',help='maximum number of requests')
+                        help='number of items to appear per request, default = 100')
+    parser.add_argument('--max_requests',help='maximum number of requests, default = 100', default=100)
     return parser.parse_args()
 
 
