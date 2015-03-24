@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-This is a file 
+This is a file to pull content from the Github elastic search issues API
 """
 import argparse
 import ConfigParser
