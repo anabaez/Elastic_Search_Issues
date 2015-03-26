@@ -48,6 +48,7 @@ def get_comments_by_url(CACHE_FOLDER, url, auth):
     try:
         #HIT
         with open(cache_file_path, 'rb') as cache_file:
+            print 'comment already uploaded'
             return json.loads(cache_file.read())
     except IOError:
         #MISS
@@ -56,6 +57,7 @@ def get_comments_by_url(CACHE_FOLDER, url, auth):
 
         with open(cache_file_path, 'wb') as cache_file:
             cache_file.write(json.dumps(data, indent=4))
+            print 'new request'
         return data
 
 def parse_link_header(headers):
@@ -83,6 +85,8 @@ def main(args, config):
     #uploader
 
     CACHE_FOLDER = 'C:/Python27/cache'
+    url = config.get('git_credentials', 'url')
+
 
 
     p = getpass.getpass(prompt='Github password: ')
@@ -90,7 +94,7 @@ def main(args, config):
                             source_name=config.get('squirro_credentials','source_name'),
                             token=config.get('squirro_credentials','token'),
                             cluster=config.get('squirro_credentials','cluster'))
-    url = config.get('git_credentials', 'url')
+    
     user = (config.get('git_credentials','user'), p)
 
     payload = {'per_page':str(args.per_page),'page':1, 'state':'all', 'sort':'updated'}
@@ -103,7 +107,8 @@ def main(args, config):
         items = []
         issues = r.json()
         if request_count >= args.max_requests:
-            print '%s requests made, ending script' % str(requests_count)
+            break
+            print '%s requests made, ending script' % str(request_count)
 
         #keep track of iterations
         issue_count += (int(args.per_page))
@@ -115,7 +120,7 @@ def main(args, config):
             item['id'] = issue['id']
             item['link'] = issue['html_url']
             item['created_at'] = issue['updated_at'].strip('Z')
-
+            print issue
             #issue closed at
             if issue['closed_at'] != None:
                 closed_at = ' - ' + issue['closed_at'].strip('Z')
@@ -146,7 +151,7 @@ def main(args, config):
 
             #if the ticket has comments
             if issue['comments'] != '0':
-                comments = requests.get(issue['comments_url'], auth=user).json()
+                comments = get_comments_by_url(CACHE_FOLDER,issue['comments_url'], auth=user)
                 for comment in comments:
 
                     request_count += 1
@@ -194,7 +199,7 @@ def main(args, config):
             if not next:
                 break
             r = requests.get(next, auth=user)
-
+            
         uploader.upload(items)
         print 'Uploaded %s issues' % str(issue_count)
 
