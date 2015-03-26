@@ -130,17 +130,17 @@ def main(args, config):
             body = u"""
                 <html>
                     <head> 
-                        <H6> 
-                Status: {status}  {closed_at} <br/>
-                Author: {author} <br/>
-                Updated: {updated}
-                        </H6>
+                        <H5> 
+                        Status: {status}  {closed_at} <br/>
+                        Author: {author} <br/>
+                        Updated: {updated}
+                        </H5>
                     </head>
-                    <pre>
+                <pre>
                     <body>
                     {body}
                     </body>
-                    </pre>
+                </pre>
                 </html>
                 """.format(
                         author = issue['user']['login'],
@@ -158,17 +158,19 @@ def main(args, config):
                     body += u"\n" + u"""
                         <html>
                             <head>
-                                <H6>
+                                <H5>
                                     Comment: <br/>
                                     Author: {author} <br/>
                                     Updated: {updated}
-                                </H6>
+                                </H5>
                             </head>
-                            
+                        
                                 <body>
+                                <pre>
                                 {body}
+                                </pre>
                                 </body>
-                            
+                           
                         </html>
                         """.format(
                                 author=comment['user']['login'],
