@@ -13,7 +13,7 @@ import requests
 import getpass
 import hashlib
 import json
-
+import HTMLParser
 
 # Script version. It's recommended to increment this with every change, to make
 # debugging easier.
@@ -81,7 +81,6 @@ def parse_link_header(headers):
 
 def main(args, config):
     #uploader
-
     CACHE_FOLDER = 'C:/Python27/cache'
 
 
@@ -94,14 +93,17 @@ def main(args, config):
     user = (config.get('git_credentials','user'), p)
 
     payload = {'per_page':str(args.per_page),'page':1, 'state':'all', 'sort':'updated'}
-    print config.get('git_credentials', 'user')
-
+    
+    h = HTMLParser.HTMLParser()
     r = requests.get(url, auth=user, params=payload)
     request_count = 0
     issue_count = 0
     while True:
         items = []
         issues = r.json()
+
+
+
         if request_count >= args.max_requests:
             print '%s requests made, ending script' % str(requests_count)
 
@@ -131,12 +133,13 @@ def main(args, config):
                 Updated: {updated}
                         </H6>
                     </head>
-                    <pre>
+                    
                     <body>
+                    <pre>
                     {body}
-                    </body>
                     </pre>
-                </html>
+                    </body>
+                    </html>
                 """.format(
                         author = issue['user']['login'],
                         updated = issue['updated_at'],
@@ -175,14 +178,15 @@ def main(args, config):
             ks = {}
             if issue['locked'] == True:
                 ks['locked'] = 'locked'
-            # if issue['assignee']['login']:
-            #     ks['assignee'] = issue['assignee']['login']
-            if  issue['milestone']:
+            if issue['assignee']:
+                ks['assignee'] = issue['assignee']['login']
+            if  issue['milestone'] != '':
                 ks['milestone'] = issue['milestone']
             ks['comments'] = str(issue['comments'])
             ks['status'] = issue['state']
             ks['id'] = issue['id']
-            ks['labels'] = []
+            ks['author'] = issue['user']['login']
+            ks['labels'] = []           
             for label in issue['labels']:
                 ks['labels'].append(label['name'])
             item['keywords'] = ks
