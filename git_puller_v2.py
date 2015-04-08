@@ -8,12 +8,12 @@ import logging
 import os
 import sys
 import time
-from squirro_client import ItemUploader 
+from squirro_client import ItemUploader
 import requests
 import getpass
 import hashlib
 import json
-
+import markdown
 
 # Script version. It's recommended to increment this with every change, to make
 # debugging easier.
@@ -36,14 +36,14 @@ def validate_per_page(per_page):
         print '--per_page argument must be within range 1-100'
         Ex
 
-def get_comments_by_url(CACHE_FOLDER, url, auth):
+def get_comments_by_url(cache_folder, url, auth):
 
     #create cachekey
     m = hashlib.md5()
     m.update(url)
     key = m.hexdigest()
 
-    cache_file_path = "%s/%s.json" % (CACHE_FOLDER, key)
+    cache_file_path = "%s/%s.json" % (cache_folder, key)
 
     try:
         #HIT
@@ -84,20 +84,17 @@ def parse_link_header(headers):
 def main(args, config):
     #uploader
 
-    CACHE_FOLDER = 'C:/Python27/cache'
+    cache_folder = config.get('squirro','cache_folder')
     url = config.get('git_credentials', 'url')
+    password = getpass.getpass(prompt='Github password: ')
+    uploader = ItemUploader(project_id=config.get('squirro', 'project_id'),
+                            source_name=config.get('squirro', 'source_name'),
+                            token=config.get('squirro', 'token'),
+                            cluster=config.get('squirro', 'cluster'))
 
+    user = (config.get('git_credentials', 'user'), password)
 
-
-    p = getpass.getpass(prompt='Github password: ')
-    uploader = ItemUploader(project_id=config.get('squirro_credentials','project_id'),
-                            source_name=config.get('squirro_credentials','source_name'),
-                            token=config.get('squirro_credentials','token'),
-                            cluster=config.get('squirro_credentials','cluster'))
-    
-    user = (config.get('git_credentials','user'), p)
-
-    payload = {'per_page':str(args.per_page),'page':1, 'state':'all', 'sort':'updated'}
+    payload = {'per_page':str(args.per_page), 'page':1, 'state':'all', 'sort':'updated'}
     print config.get('git_credentials', 'user')
 
     r = requests.get(url, auth=user, params=payload)
@@ -107,14 +104,14 @@ def main(args, config):
         items = []
         issues = r.json()
         if request_count >= args.max_requests:
-            break
             print '%s requests made, ending script' % str(request_count)
+            break
 
         #keep track of iterations
         issue_count += (int(args.per_page))
         request_count += 1
-        
-        for issue in issues: 
+
+        for issue in issues:
             item={}
             item['title'] = issue['title']
             item['id'] = issue['id']
@@ -128,54 +125,38 @@ def main(args, config):
                 closed_at = ''
 
             body = u"""
-                <html>
-                    <head> 
-                        <H6> 
+                         <H5>
                 Status: {status}  {closed_at} <br/>
                 Author: {author} <br/>
                 Updated: {updated}
-                        </H6>
-                    </head>
-                    <pre>
-                    <body>
+                        </H5>
+                    <p>
                     {body}
-                    </body>
-                    </pre>
-                </html>
-                """.format(
-                        author = issue['user']['login'],
-                        updated = issue['updated_at'],
-                        body = issue['body'],
-                        status = issue['state'],
-                        closed_at = closed_at)
-
+                    </p>
+                    """.format(author=issue['user']['login'],
+                               updated=issue['updated_at'],
+                               body=markdown.markdown(issue['body']),
+                               status=issue['state'],
+                               closed_at=closed_at)
+            print markdown.markdown(issue['body'])
             #if the ticket has comments
             if issue['comments'] != '0':
-                comments = get_comments_by_url(CACHE_FOLDER,issue['comments_url'], auth=user)
+                comments = get_comments_by_url(cache_folder, issue['comments_url'], auth=user)
                 for comment in comments:
 
                     request_count += 1
                     body += u"\n" + u"""
-                        <html>
-                            <head>
-                                <H6>
+
                                     Comment: <br/>
                                     Author: {author} <br/>
                                     Updated: {updated}
-                                </H6>
-                            </head>
-                            
-                                <body>
-                                {body}
-                                </body>
-                            
-                        </html>
-                        """.format(
-                                author=comment['user']['login'],
-                                updated=comment['updated_at'].strip('Z'),
-                                body=comment['body'])        
-            item['body'] = body
+                                    {body}
+                        """.format(author=comment['user']['login'],
+                                   updated=comment['updated_at'].strip('Z'),
+                                   body=comment['body'])
+                    print markdown.markdown(comment['body'])
 
+            item['body'] = body
             #Add keywords
             ks = {}
             if issue['locked'] == True:
@@ -189,17 +170,17 @@ def main(args, config):
             ks['id'] = issue['id']
             ks['labels'] = []
             for label in issue['labels']:
-                ks['labels'].append(label['name'])
+                ks['labels'].append(label['name'].replace(':', ''))
             item['keywords'] = ks
 
-            items.append(item)        
+            items.append(item)
 
             #when the loop reaches the last page of issues there is no more 'rel:next' in r.headers
             next = parse_link_header(r.headers)
             if not next:
                 break
             r = requests.get(next, auth=user)
-            
+
         uploader.upload(items)
         print 'Uploaded %s issues' % str(issue_count)
 
