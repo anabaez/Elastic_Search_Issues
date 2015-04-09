@@ -28,13 +28,12 @@ def pretty_print(obj):
     return
 
 #how do I validate this properly?
-def validate_per_page(per_page):
-    try:
-        if int(per_page) <= 100 and int(per_page) > 0:
-            return per_page
-    except:
-        print '--per_page argument must be within range 1-100'
-        Ex
+# def validate_per_page(per_page):
+#     try:
+#         if int(per_page) <= 100 and int(per_page) > 0:
+#             return per_page
+#     except Exception:
+#         print '--per_page argument must be within range 1-100'
 
 def get_comments_by_url(cache_folder, url, auth):
 
@@ -71,28 +70,90 @@ def parse_link_header(headers):
     next_link = None
 
     #look for the next link
+
     for link in links:
         if link.find('\"next\"') == -1:
             continue
-
         #extract the next url
         return link.split(';')[0].strip().strip('<').strip('>')
-
     return None
 
+def create_squirro_item(issue):
+    """create squirro item from issue, excluding keywords and comments"""
+
+    item = {}
+    item['title'] = issue['title']
+    item['id'] = issue['id']
+    item['link'] = issue['html_url']
+    issue['updated_at'] = issue['updated_at'].strip('Z')
+    item['created_at'] = issue['updated_at']
+
+    if issue['closed_at'] != None:
+        closed_at = ' - ' + issue['closed_at'].strip('Z')
+    else:
+        closed_at = ''
+
+    item['body'] = u"""
+        <h5>
+            Status: {status}  {closed_at} <br/>
+            Author: {author} <br/>
+            Updated: {updated}
+        </h5>
+            {body}
+            """.format(author=issue['user']['login'],
+                       updated=issue['updated_at'],
+                       body=markdown.markdown(issue['body']),
+                       status=issue['state'],
+                       closed_at=closed_at)
+    return item
+
+def add_comments(body, comments):
+    for comment in comments:
+        #request_count += 1
+        body += u"\n" + u"""
+                        <h5>
+                        <hr>
+                        Comment <br/>
+                        Author: {author} <br/>
+                        Updated: {updated}
+                        </h5>
+
+                        {body}
+            """.format(author=comment['user']['login'],
+                       updated=comment['updated_at'].strip('Z'),
+                       body=markdown.markdown(comment['body']))
+    return body
+
+def add_keywords(issue):
+    """returns a dictionary of keywords"""
+    ks = {}
+    if issue['locked'] == True:
+        ks['locked'] = 'locked'
+    if  issue['milestone']:
+        ks['milestone'] = issue['milestone']
+    ks['comments'] = str(issue['comments'])
+    ks['status'] = issue['state']
+    ks['id'] = issue['id']
+    ks['labels'] = []
+    for label in issue['labels']:
+        ks['labels'].append(label['name'].replace(':', ''))
+    return ks
 
 def main(args, config):
     #uploader
 
-    cache_folder = config.get('squirro','cache_folder')
+    cache_folder = config.get('squirro', 'cache_folder')
     url = config.get('git_credentials', 'url')
-    password = getpass.getpass(prompt='Github password: ')
+    username = config.get('git_credentials', 'user')
+    password_prompt = 'Github password for user %s: ' % username
+    password = getpass.getpass(prompt=password_prompt)
+    user = (username, password)
     uploader = ItemUploader(project_id=config.get('squirro', 'project_id'),
                             source_name=config.get('squirro', 'source_name'),
                             token=config.get('squirro', 'token'),
                             cluster=config.get('squirro', 'cluster'))
 
-    user = (config.get('git_credentials', 'user'), password)
+
 
     payload = {'per_page':str(args.per_page), 'page':1, 'state':'all', 'sort':'updated'}
     print config.get('git_credentials', 'user')
@@ -112,67 +173,13 @@ def main(args, config):
         request_count += 1
 
         for issue in issues:
-            item={}
-            item['title'] = issue['title']
-            item['id'] = issue['id']
-            item['link'] = issue['html_url']
-            item['created_at'] = issue['updated_at'].strip('Z')
-            print issue
-            #issue closed at
-            if issue['closed_at'] != None:
-                closed_at = ' - ' + issue['closed_at'].strip('Z')
-            else:
-                closed_at = ''
+            item = create_squirro_item(issue)
 
-            body = u"""
-                         <H5>
-                Status: {status}  {closed_at} <br/>
-                Author: {author} <br/>
-                Updated: {updated}
-                        </H5>
-                    <p>
-                    {body}
-                    </p>
-                    """.format(author=issue['user']['login'],
-                               updated=issue['updated_at'],
-                               body=markdown.markdown(issue['body']),
-                               status=issue['state'],
-                               closed_at=closed_at)
-            print markdown.markdown(issue['body'])
-            #if the ticket has comments
             if issue['comments'] != '0':
                 comments = get_comments_by_url(cache_folder, issue['comments_url'], auth=user)
-                for comment in comments:
+                item['body'] = add_comments(item['body'], comments)
 
-                    request_count += 1
-                    body += u"\n" + u"""
-
-                                    Comment: <br/>
-                                    Author: {author} <br/>
-                                    Updated: {updated}
-                                    {body}
-                        """.format(author=comment['user']['login'],
-                                   updated=comment['updated_at'].strip('Z'),
-                                   body=comment['body'])
-                    print markdown.markdown(comment['body'])
-
-            item['body'] = body
-            #Add keywords
-            ks = {}
-            if issue['locked'] == True:
-                ks['locked'] = 'locked'
-            # if issue['assignee']['login']:
-            #     ks['assignee'] = issue['assignee']['login']
-            if  issue['milestone']:
-                ks['milestone'] = issue['milestone']
-            ks['comments'] = str(issue['comments'])
-            ks['status'] = issue['state']
-            ks['id'] = issue['id']
-            ks['labels'] = []
-            for label in issue['labels']:
-                ks['labels'].append(label['name'].replace(':', ''))
-            item['keywords'] = ks
-
+            item['keywords'] = add_keywords(issue)
             items.append(item)
 
             #when the loop reaches the last page of issues there is no more 'rel:next' in r.headers
@@ -197,7 +204,7 @@ def parse_args():
                         help='Configuration file to read settings from.')
     parser.add_argument('--per_page', '-pp', default='100',
                         help='number of items to appear per request, default = 100')
-    parser.add_argument('--max_requests',help='maximum number of requests, default = 100', default=100)
+    parser.add_argument('--max_requests', help='maximum number of requests, default = 100', default=100)
     return parser.parse_args()
 
 
